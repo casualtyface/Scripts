@@ -1,53 +1,124 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-pkg=(
+required=(
     bat
     git
+    cmake
+    make
     fish
     eza
     zoxide
     vim
     sudo
-)
-extra_pkg=(
     fastfetch
-)
-deb_pkg=(
     unattended-upgrades
 )
 
-install_packages() {
-    if command -v apt >/dev/null 2>&1; then
-        apt-get update
-        apt-get install -y "${pkg[@]}" "${deb_pkg[@]}"
+pm=(
+    apt
+    dnf
+    apk
+    zypper
+    yay
+    pacman
+    yum
+)
 
-    elif command -v dnf >/dev/null 2>&1; then
-        dnf install -y "${pkg[@]}" "${extra_pkg[@]}"
+pkg=()
 
-    elif command -v pacman >/dev/null 2>&1; then
-        pacman -Sy --needed "${pkg[@]}" "${extra_pkg[@]}"
+package_manager=()
 
-    elif command -v zypper >/dev/null 2>&1; then
-        zypper install -y "${pkg[@]}" "${extra_pkg[@]}"
+printf "%s\n" "checking for packages: ${required[*]}"
 
-    elif command -v apk >/dev/null 2>&1; then
-        apk add "${pkg[@]}" "${extra_pkg[@]}"
-
-    elif command -v brew >/dev/null 2>&1; then
-        install "${pkg[@]}" "${extra_pkg[@]}"
-
-    else
-        echo "Unsupported package manager."
-        exit 1
+for cmd in "${required[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        pkg+=("$cmd")
     fi
+done
+
+for cmd in "${pm[@]}"; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+        package_manager+=("$cmd")
+    fi
+done
+
+if [[ -n ${pkg[@]} ]]; then
+    printf "%s\n" "Packages You dont have: ${pkg[*]}"
+    printf "%s\n" "Installing with ${package_manager[$1]} package manager"
+else
+    printf "%s\n" "packages already installed"
+fi
+
+package_exists() {
+    case "$package_manager" in
+        apt)     apt-cache show "$1" >/dev/null 2>&1 ;;
+        dnf)     dnf info "$1" >/dev/null 2>&1 ;;
+        pacman)  pacman -Si "$1" >/dev/null 2>&1 ;;
+        apk)     apk info "$1" >/dev/null 2>&1 ;;
+        zypper)  zypper info "$1" >/dev/null 2>&1 ;;
+        yum)     yum info "$1" >/dev/null 2>&1 ;;
+        yay)     yay -Si "$1" >/dev/null 2>&1 ;;
+    esac
 }
 
-install_packages
+for p in "${pkg[@]}"; do
+    ! package_exists "$p" && missing+=("$p") || echo "Skipping $p"
+done
+
+invalid_pkg=("${missing[@]}")
+
+filtered=()
+
+for p in "${pkg[@]}"; do
+    found=false
+    for bad in "${invalid_pkg[@]}"; do
+        if [[ $p == "$bad" ]]; then
+            found=true
+            break
+        fi
+    done
+    $found || filtered+=("$p")
+done
+
+pkg=("${filtered[*]}")
+
+case "$package_manager" in
+    apt)
+        apt-get update
+        apt-get install -y "${pkg[@]}"
+        ;;
+    dnf)
+        dnf check-update --refresh
+        dnf install -y "${pkg[@]}"
+        ;;
+    apk)
+        apk update
+        apk add "${pkg[@]}"
+        ;;
+    zypper)
+        zypper refresh
+        zypper install -y --no-confirm "${pkg[@]}"
+        ;;
+    yay)
+        yay -Sy --needed --noconfirm "${pkg[@]}"
+        ;;
+    pacman)
+        pacman -Sy --needed --noconfirm "${pkg[@]}"
+        ;;
+    yum)
+        yum check-update
+        yum install -y "${pkg[@]}"
+        ;;
+    *)
+        printf "%s\n" "Unsupported package manager."
+        exit 1
+        ;;
+esac
 
 install_fastfetch() {
     if command -v fastfetch >/dev/null 2>&1; then
-        echo "fastfetch already installed"
+        printf "%s\n" "fastfetch already installed"
         return
     fi
 
@@ -58,7 +129,7 @@ install_fastfetch() {
             return
         fi
 
-        echo "fastfetch not found in apt, downloading .deb..."
+        printf "%s\n" "fastfetch not found in apt, downloading .deb..."
 
         ARCH=$(dpkg --print-architecture)
 
@@ -70,7 +141,7 @@ install_fastfetch() {
                 FILE="fastfetch-linux-aarch64.deb"
                 ;;
             *)
-                echo "Unsupported architecture: $ARCH"
+                printf "%s\n" "Unsupported architecture: $ARCH"
                 exit 1
                 ;;
         esac
@@ -87,16 +158,16 @@ install_fastfetch() {
         rm -f "/tmp/$FILE"
 
     else
-        echo "No supported package manager found"
+        printf "%s\n" "No supported package manager found"
         exit 1
     fi
 }
 
 install_fastfetch
 
-echo "Cloning Repo"
+printf "%s\n" "Cloning Repo"
 
-REPO="https://github.com/casualtyface/custom-script.git"
+REPO="https://github.com/casualtyface/Scripts.git"
 DOTFILES="$HOME/.dotfiles"
 
 git clone "$REPO" "$DOTFILES"
@@ -128,7 +199,7 @@ BACKUP="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
 # Create backup
 cp "$CONFIG" "$BACKUP"
 
-echo "Backup created: $BACKUP"
+printf "%s\n" "Backup created: $BACKUP"
 
 declare -A SETTINGS=(
     ["AddressFamily"]="inet"
@@ -147,28 +218,28 @@ for key in "${!SETTINGS[@]}"; do
         sed -i -E "s|^[#[:space:]]*$key[[:space:]].*|$key $value|" "$CONFIG"
     else
         # Add missing entry
-        echo "$key $value" >> "$CONFIG"
+        printf "%s\n" "$key $value" >> "$CONFIG"
     fi
 done
 
-echo "SSH configuration updated."
+printf "%s\n" "SSH configuration updated."
 
 # Check configuration
 sshd -t
 
 if [ $? -eq 0 ]; then
-    echo "SSH configuration syntax OK."
-    echo "Restart SSH service to apply changes:"
-    echo "systemctl restart sshd"
+    printf "%s\n" "SSH configuration syntax OK."
+    printf "%s\n" "Restart SSH service to apply changes:"
+    printf "%s\n" "systemctl restart sshd"
 else
-    echo "ERROR: SSH configuration test failed. Restore backup:"
-    echo "cp $BACKUP $CONFIG"
+    printf "%s\n" "ERROR: SSH configuration test failed. Restore backup:"
+    printf "%s\n" "cp $BACKUP $CONFIG"
 fi
 
 CONFIG="/etc/pam.d/sshd"
 
 if [ ! -f "$CONFIG" ]; then
-    echo "ERROR: Cannot find $CONFIG"
+    printf "%s\n" "ERROR: Cannot find $CONFIG"
     exit 1
 fi
 
@@ -176,7 +247,7 @@ BACKUP="${CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
 
 cp "$CONFIG" "$BACKUP"
 
-echo "Backup created: $BACKUP"
+printf "%s\n" "Backup created: $BACKUP"
 
 RULES=(
 "session    optional     pam_motd.so  motd=/run/motd.dynamic"
@@ -187,30 +258,30 @@ RULES=(
 for rule in "${RULES[@]}"; do
     if grep -qF "$rule" "$CONFIG"; then
         sed -i "s|^$rule|#$rule|" "$CONFIG"
-        echo "Disabled: $rule"
+        printf "%s\n" "Disabled: $rule"
     else
-        echo "Not found: $rule"
+        printf "%s\n" "Not found: $rule"
     fi
 done
 
-echo
-echo "Current PAM entries:"
+printf "%s\n"
+printf "%s\n" "Current PAM entries:"
 grep -E "pam_motd|pam_mail" "$CONFIG"
 
 systemctl restart sshd
 
 if [ $? -eq 0 ]; then
-    echo "SSH service restarted successfully."
+    printf "%s\n" "SSH service restarted successfully."
     systemctl status sshd --no-pager
 else
-    echo "ERROR: Failed to restart SSH service."
-    echo "Checking SSH configuration:"
+    printf "%s\n" "ERROR: Failed to restart SSH service."
+    printf "%s\n" "Checking SSH configuration:"
     sshd -t
 fi
 
 # Add fish to valid login shells if not already present
 if ! grep -qx "/usr/local/bin/fish" /etc/shells; then
-    echo "/usr/local/bin/fish" | sudo tee -a /etc/shells >/dev/null
+    printf "%s\n" "/usr/local/bin/fish" | sudo tee -a /etc/shells >/dev/null
 fi
 
 # Change current user's shell to fish
