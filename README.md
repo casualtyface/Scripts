@@ -1,2 +1,2 @@
 # Scripts
- smoll scriptsi make
+ small scripts
