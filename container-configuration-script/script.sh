@@ -29,6 +29,9 @@ pkg=()
 
 package_manager=()
 
+dotfiles="$HOME/.dotfiles"
+repo_exist="$dotfiles/container-configuration-script"
+
 printf "%s\n" "checking for packages: ${required[*]}"
 
 for cmd in "${required[@]}"; do
@@ -118,90 +121,68 @@ esac
 
 install_fastfetch() {
     if command -v fastfetch >/dev/null 2>&1; then
-        printf "%s\n" "fastfetch already installed"
         return
     fi
 
-    if command -v apt >/dev/null 2>&1; then
-        # Try distro package first
-        if apt-cache show fastfetch >/dev/null 2>&1; then
-            sudo apt install -y fastfetch
-            return
-        fi
+    printf "%s\n" "fastfetch is missing"
 
-        printf "%s\n" "fastfetch not found in apt, downloading .deb..."
+    build_dir=$(mktemp -d)
 
-        ARCH=$(dpkg --print-architecture)
+    printf "%s\n" "Cloning fastfetch..."
+    git clone --depth=1 https://github.com/fastfetch-cli/fastfetch.git "$build_dir"
 
-        case "$ARCH" in
-            amd64)
-                FILE="fastfetch-linux-amd64.deb"
-                ;;
-            arm64)
-                FILE="fastfetch-linux-aarch64.deb"
-                ;;
-            *)
-                printf "%s\n" "Unsupported architecture: $ARCH"
-                exit 1
-                ;;
-        esac
+    cd "$build_di" || exit 1
 
-        URL=$(curl -fsSL https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest \
-            | grep browser_download_url \
-            | grep "$FILE" \
-            | cut -d '"' -f 4)
+    printf "%s\n" "Building fastfetch..."
+    cmake -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build -j"$(nproc)"
 
-        wget -q "$URL" -O "/tmp/$FILE"
+    printf "%s\n" "Installing fastfetch..."
+    sudo cmake --install build
 
-        sudo dpkg -i "/tmp/$FILE" || sudo apt -f install -y
+    cd /
+    rm -rf "$build_di"
 
-        rm -f "/tmp/$FILE"
-
-    else
-        printf "%s\n" "No supported package manager found"
-        exit 1
-    fi
+    printf "%s\n" "fastfetch installed successfully."
 }
 
 install_fastfetch
 
-printf "%s\n" "Cloning Repo"
+install_my_scripts() {
+    if [[ -d "$repo_exist"]]; then
+        printf "%s\n" "Scripts Repo exist"
+        return
+    fi
 
-REPO="https://github.com/casualtyface/Scripts.git"
-DOTFILES="$HOME/.dotfiles"
+    printf "%s\n" "Cloning Scripts repo..."
 
-git clone "$REPO" "$DOTFILES"
+    repo="https://github.com/casualtyface/Scripts.git"
 
-mkdir -p "$HOME/.config/fish"
+    git clone --depth=1 "$repo" "$dotfiles"
 
-ln -sf "$DOTFILES/fish/config.fish" "$HOME/.config/fish/config.fish"
+    mkdir -p "$HOME/.config/fish"
 
-chmod 644 "$HOME/.config/fish/config.fish"
+    ln -sf "$dotfiles/fish/config.fish" "$HOME/.config/fish/config.fish"
 
-if [ ! -d "$HOME/.ssh" ]; then
-    mkdir -p "$HOME/.ssh"
-    chmod 700 "$HOME/.ssh"
-fi
+    chmod 644 "$HOME/.config/fish/config.fish"
+}
 
-# Disable the default MOTD scripts (Debian/Ubuntu)
-sudo rm -f /etc/update-motd.d/10-uname
+install_my_scripts
 
-if [ -d /etc/update-motd.d ]; then
-    sudo chmod -x /etc/update-motd.d/*
-fi
+[[ ! -d "$HOME/.ssh" ]] && { mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"; }
 
-# Silence the login banner for root
-sudo touch /root/.hushlogin
+[[ -e /etc/update-motd.d/10-uname ]] && sudo rm -f /etc/update-motd.d/10-uname
 
-CONFIG="/etc/ssh/sshd_config"
-BACKUP="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
+[[ -d /etc/update-motd.d ]] && sudo chmod -x /etc/update-motd.d/*
 
-# Create backup
-cp "$CONFIG" "$BACKUP"
+[[ ! -e /root/.hushlogin ]] && sudo touch /root/.hushlogin
 
-printf "%s\n" "Backup created: $BACKUP"
+config="/etc/ssh/sshd_config"
+backup="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
 
-declare -A SETTINGS=(
+[[ ! -e "$backup" ]] && cp "$config" "$backup" && printf "%s\n" "Backup created: $backup" || printf "%s\n" "Backup failed"
+
+declare -A settings=(
     ["AddressFamily"]="inet"
     ["PermitRootLogin"]="prohibit-password"
     ["PasswordAuthentication"]="no"
@@ -210,21 +191,20 @@ declare -A SETTINGS=(
     ["Banner"]="none"
 )
 
-for key in "${!SETTINGS[@]}"; do
-    value="${SETTINGS[$key]}"
+for key in "${!settings[@]}"; do
+    value="${settings[$key]}"
 
-    if grep -qE "^[#[:space:]]*$key[[:space:]]+" "$CONFIG"; then
+    if grep -qE "^[#[:space:]]*$key[[:space:]]+" "$config"; then
         # Replace existing entry
-        sed -i -E "s|^[#[:space:]]*$key[[:space:]].*|$key $value|" "$CONFIG"
+        sed -i -E "s|^[#[:space:]]*$key[[:space:]].*|$key $value|" "$config"
     else
         # Add missing entry
-        printf "%s\n" "$key $value" >> "$CONFIG"
+        printf "%s\n" "$key $value" >> "$config"
     fi
 done
 
 printf "%s\n" "SSH configuration updated."
 
-# Check configuration
 sshd -t
 
 if [ $? -eq 0 ]; then
@@ -233,21 +213,21 @@ if [ $? -eq 0 ]; then
     printf "%s\n" "systemctl restart sshd"
 else
     printf "%s\n" "ERROR: SSH configuration test failed. Restore backup:"
-    printf "%s\n" "cp $BACKUP $CONFIG"
+    printf "%s\n" "cp $backup $config"
 fi
 
-CONFIG="/etc/pam.d/sshd"
+config="/etc/pam.d/sshd"
 
-if [ ! -f "$CONFIG" ]; then
-    printf "%s\n" "ERROR: Cannot find $CONFIG"
+if [ ! -f "$config" ]; then
+    printf "%s\n" "ERROR: Cannot find $config"
     exit 1
 fi
 
-BACKUP="${CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
+BACKUP="${config}.backup.$(date +%Y%m%d_%H%M%S)"
 
-cp "$CONFIG" "$BACKUP"
+cp "$config" "$backup"
 
-printf "%s\n" "Backup created: $BACKUP"
+printf "%s\n" "Backup created: $backup"
 
 RULES=(
 "session    optional     pam_motd.so  motd=/run/motd.dynamic"
@@ -256,8 +236,8 @@ RULES=(
 )
 
 for rule in "${RULES[@]}"; do
-    if grep -qF "$rule" "$CONFIG"; then
-        sed -i "s|^$rule|#$rule|" "$CONFIG"
+    if grep -qF "$rule" "$config"; then
+        sed -i "s|^$rule|#$rule|" "$config"
         printf "%s\n" "Disabled: $rule"
     else
         printf "%s\n" "Not found: $rule"
@@ -266,7 +246,7 @@ done
 
 printf "%s\n"
 printf "%s\n" "Current PAM entries:"
-grep -E "pam_motd|pam_mail" "$CONFIG"
+grep -E "pam_motd|pam_mail" "$config"
 
 systemctl restart sshd
 
