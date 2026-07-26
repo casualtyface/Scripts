@@ -209,7 +209,7 @@ printf "%s\n" "SSH configuration updated."
 
 sshd -t
 
-if [ $? -eq 0 ]; then
+if [[ $? -eq 0 ]]; then
     printf "%s\n" "SSH configuration syntax OK."
     printf "%s\n" "Restart SSH service to apply changes:"
     printf "%s\n" "systemctl restart sshd"
@@ -220,7 +220,7 @@ fi
 
 config="/etc/pam.d/sshd"
 
-if [ ! -f "$config" ]; then
+if [[ ! -f "$config" ]]; then
     printf "%s\n" "ERROR: Cannot find $config"
     exit 1
 fi
