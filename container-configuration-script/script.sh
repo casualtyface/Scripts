@@ -151,7 +151,7 @@ install_fastfetch() {
 install_fastfetch
 
 install_my_scripts() {
-    if [[ -d "$repo_exist"]]; then
+    if [[ -d "$repo_exist" ]]; then
         printf "%s\n" "Scripts Repo exist"
         return
     fi
