@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+# bash -c "$(curl -fsSL https://raw.githubusercontent.com/casualtyface/Scripts/main/container-configuration-script/script.sh)"
 set -euo pipefail
 
 required=(
@@ -85,6 +87,12 @@ for p in "${pkg[@]}"; do
 done
 
 pkg=("${filtered[*]}")
+
+printf "%s\n" "E: Unable to locate package bat git cmake make fish eza zoxide vim fastfetch unattended-upgrades"
+
+printf "%s\n" "packages to install: ${pkg[*]}"
+
+exit 1
 
 case "$package_manager" in
     apt)
