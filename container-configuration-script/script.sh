@@ -68,7 +68,7 @@ package_exists() {
 }
 
 for p in "${pkg[@]}"; do
-    ! package_exists "$p" && missing+=("$p") || echo "Skipping $p"
+    package_exists "$p" && echo "Skipping $p" || missing+=("$p")
 done
 
 invalid_pkg=("${missing[@]}")
@@ -86,13 +86,7 @@ for p in "${pkg[@]}"; do
     $found || filtered+=("$p")
 done
 
-pkg=("${filtered[*]}")
-
-printf "%s\n" "E: Unable to locate package bat git cmake make fish eza zoxide vim fastfetch unattended-upgrades"
-
-printf "%s\n" "packages to install: ${pkg[*]}"
-
-exit 1
+pkg=("${filtered[@]}")
 
 case "$package_manager" in
     apt)
