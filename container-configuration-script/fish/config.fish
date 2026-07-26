@@ -1,7 +1,6 @@
 if status is-interactive
     # Commands to run in interactive sessions can go here
-    clear
-    fastfetch
+    cfastfetch
     set -U fish_greeting
 end
 
@@ -30,6 +29,7 @@ alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 alias cat='batcat'
 alias cfastfetch='clear && fastfetch'
+alias clear="clear && fastfetch"
 
 # Other
 alias emacs="emacsclient -c -a 'emacs'" 
