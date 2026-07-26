@@ -48,7 +48,7 @@ done
 
 if [[ -n ${pkg[@]} ]]; then
     printf "%s\n" "Packages You dont have: ${pkg[*]}"
-    printf "%s\n" "Installing with ${package_manager[$1]} package manager"
+    printf "%s\n" "Installing with ${package_manager[*]} package manager"
 else
     printf "%s\n" "packages already installed"
 fi
