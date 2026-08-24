@@ -151,23 +151,36 @@ install_fastfetch() {
 install_fastfetch
 
 install_my_scripts() {
-    if [[ -d "$repo_exist" ]]; then
-        printf "%s\n" "Scripts Repo exist"
-        return
-    fi
-
-    printf "%s\n" "Cloning Scripts repo..."
-
     repo="https://github.com/casualtyface/Scripts.git"
 
-    git clone --depth=1 "$repo" "$dotfiles"
+    # Clone the repo if it doesn't exist
+    if [[ ! -d "$repo_exist" ]]; then
+        printf "%s\n" "Cloning Scripts repo..."
+        git clone --depth=1 "$repo" "$dotfiles" || return 1
+    else
+        printf "%s\n" "Scripts repo exists"
+    fi
 
+    # Make sure the destination directory exists
     mkdir -p "$HOME/.config/fish"
 
-    chmod 644 "$dotfiles/container-configuration-script/fish/config.fish"
+    # Copy config.fish if it is missing
+    if [[ ! -f "$HOME/.config/fish/config.fish" ]]; then
+        printf "%s\n" "Installing fish config..."
 
-    cp "$dotfiles/container-configuration-script/fish/config.fish" "$HOME/.config/fish/config.fish"
+        if [[ -f "$dotfiles/container-configuration-script/fish/config.fish" ]]; then
+            chmod 644 "$dotfiles/container-configuration-script/fish/config.fish"
+            cp "$dotfiles/container-configuration-script/fish/config.fish" \
+               "$HOME/.config/fish/config.fish"
+        else
+            printf "%s\n" "Error: config.fish not found in repository"
+            return 1
+        fi
+    else
+        printf "%s\n" "Fish config already exists"
+    fi
 }
+
 
 install_my_scripts
 
