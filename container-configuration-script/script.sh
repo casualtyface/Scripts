@@ -48,7 +48,7 @@ for cmd in "${pm[@]}"; do
     fi
 done
 
-if [[ -n ${pkg[@]} ]]; then
+if [[ -n ${pkg[*]} ]]; then
     printf "%s\n" "Packages You dont have: ${pkg[*]}"
     printf "%s\n" "Installing with ${package_manager[*]} package manager"
 else
@@ -91,11 +91,11 @@ pkg=("${filtered[@]}")
 case "$package_manager" in
     apt)
         apt-get update
-        apt-get install -y "${pkg[@]}"
+        apt-get install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
     dnf)
         dnf check-update --refresh
-        dnf install -y "${pkg[@]}"
+        dnf install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
     apk)
         apk update
@@ -103,17 +103,17 @@ case "$package_manager" in
         ;;
     zypper)
         zypper refresh
-        zypper install -y --no-confirm "${pkg[@]}"
+        zypper install -y --no-confirm "${pkg[@]}" >/dev/null 2>&1
         ;;
     yay)
-        yay -Sy --needed --noconfirm "${pkg[@]}"
+        yay -Sy --needed --noconfirm "${pkg[@]}" >/dev/null 2>&1
         ;;
     pacman)
-        pacman -Sy --needed --noconfirm "${pkg[@]}"
+        pacman -Sy --needed --noconfirm "${pkg[@]}" >/dev/null 2>&1
         ;;
     yum)
         yum check-update
-        yum install -y "${pkg[@]}"
+        yum install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
     *)
         printf "%s\n" "Unsupported package manager."
@@ -133,7 +133,7 @@ install_fastfetch() {
     printf "%s\n" "Cloning fastfetch..."
     git clone --depth=1 https://github.com/fastfetch-cli/fastfetch.git "$build_dir"
 
-    cd "$build_di" || exit 1
+    cd "$build_dir" || exit 1
 
     printf "%s\n" "Building fastfetch..."
     cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -143,7 +143,7 @@ install_fastfetch() {
     sudo cmake --install build
 
     cd /
-    rm -rf "$build_di"
+    rm -rf "$build_dir"
 
     printf "%s\n" "fastfetch installed successfully."
 }
@@ -225,7 +225,7 @@ if [[ ! -f "$config" ]]; then
     exit 1
 fi
 
-BACKUP="${config}.backup.$(date +%Y%m%d_%H%M%S)"
+backup="${config}.backup.$(date +%Y%m%d_%H%M%S)"
 
 cp "$config" "$backup"
 
@@ -246,7 +246,6 @@ for rule in "${RULES[@]}"; do
     fi
 done
 
-printf "%s\n"
 printf "%s\n" "Current PAM entries:"
 grep -E "pam_motd|pam_mail" "$config"
 
