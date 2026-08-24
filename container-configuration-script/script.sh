@@ -164,9 +164,9 @@ install_my_scripts() {
 
     mkdir -p "$HOME/.config/fish"
 
-    chmod 644 "$dotfiles/fish/config.fish"
+    chmod 644 "$dotfiles/container-configuration-script/fish/config.fish"
 
-    ln -sf "$dotfiles/fish/config.fish" "$HOME/.config/fish/config.fish"
+    cp "$dotfiles/container-configuration-script/fish/config.fish" "$HOME/.config/fish/config.fish"
 }
 
 install_my_scripts
