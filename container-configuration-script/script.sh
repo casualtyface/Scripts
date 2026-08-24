@@ -3,6 +3,8 @@
 # bash -c "$(curl -fsSL https://raw.githubusercontent.com/casualtyface/Scripts/main/container-configuration-script/script.sh)"
 set -euo pipefail
 
+clear
+
 required=(
     bat
     git
