@@ -278,14 +278,18 @@ else
     printf "%s\n" "$config not found. Skipping PAM configuration."
 fi
 
-if systemctl restart sshd || systemctl restart ssh; then
+if systemctl restart sshd >/dev/null 2>&1; then
     printf "%s\n" "SSH service restarted successfully."
     systemctl status sshd --no-pager
+elif systemctl restart ssh >/dev/null 2>&1; then
+    printf "%s\n" "SSH service restarted successfully."
+    systemctl status ssh --no-pager
 else
     printf "%s\n" "ERROR: Failed to restart SSH service."
     printf "%s\n" "Checking SSH configuration:"
     sshd -t
 fi
+
 
 # Add fish to valid login shells if not already present
 if ! grep -qx "/usr/local/bin/fish" /etc/shells; then
