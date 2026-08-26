@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/casualtyface/Scripts/main/container-configuration-script/script.sh)"
+
 set -euo pipefail
 
 clear
@@ -243,7 +245,7 @@ install_my_scripts() {
 
     build_dir=$(mktemp -d)
 
-    repo="https://github.com/<my-repo>/Scripts.git"
+    repo="https://github.com/casualtyface/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
 
     print_mint "Cloning Scripts repo..."
