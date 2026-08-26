@@ -169,34 +169,53 @@ install_fastfetch() {
 install_fastfetch
 
 install_my_scripts() {
-    cleanup() { rm -rf "$build_dir"; }
     build_dir=$(mktemp -d)
+    cleanup() { rm -rf "$build_dir"; }
+
     repo="https://github.com/casualtyface/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
-    local_config="$HOME/.config/fish/config.fish"
-    repo_exist="$build_dir/container-configuration-script"
 
-    # Clone the repo if it doesn't exist
-    if [[ ! -d "$repo_exist" ]]; then
-        printf "%s\n" "Cloning Scripts repo..."
-        git clone --depth=1 "$repo" "$build_dir" || cleanup return 1
-    else
-        printf "%s\n" "Scripts repo exists"
+    printf "%s\n" "Cloning Scripts repo..."
+
+    git clone --depth=1 "$repo" "$build_dir" || {
+        cleanup
+        return 1
+    }
+
+    if [[ ! -f "$fish_config" ]]; then
+        printf "%s\n" "ERROR: config.fish not found in repository"
+        cleanup
+        return 1
     fi
 
-    mkdir -p "$HOME/.config/fish"
+    while IFS=: read -r username _ uid _ _ home _; do
+        # Skip users without a real home directory
+        [[ -d "$home" ]] || continue
 
-    # Install if missing or different from the repo version
-    if [[ ! -f "$local_config" ]] || \
-       [[ "$(sha256sum "$fish_config" | awk '{print $1}')" != "$(sha256sum "$local_config" | awk '{print $1}')" ]]; then
+        # Skip system users
+        [[ "$uid" -ge 1000 ]] || continue
 
-        printf "%s\n" "Installing/updating fish config..."
+        local_config="$home/.config/fish/config.fish"
 
-        chmod 644 "$fish_config"
-        cp "$fish_config" "$local_config"
-    else
-        printf "%s\n" "Fish config is already up to date"
-    fi
+        mkdir -p "$home/.config/fish" || {
+            printf "%s\n" "ERROR: Failed to create Fish config directory for $username"
+            continue
+        }
+
+        if [[ ! -f "$local_config" ]] || ! cmp -s "$fish_config" "$local_config"; then
+            printf "%s\n" "Installing Fish config for $username..."
+
+            cp "$fish_config" "$local_config" || {
+                printf "%s\n" "ERROR: Failed to install Fish config for $username"
+                continue
+            }
+
+            chown "$username:$username" "$local_config"
+        else
+            printf "%s\n" "Fish config for $username is already up to date"
+        fi
+    done < /etc/passwd
+
     cleanup
 }
 
