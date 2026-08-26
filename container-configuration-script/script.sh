@@ -33,9 +33,6 @@ pkg=()
 
 package_manager=()
 
-dotfiles="$HOME/.dotfiles"
-repo_exist="$dotfiles/container-configuration-script"
-
 printf "%s\n" "checking for packages: ${required[*]}"
 
 for cmd in "${required[@]}"; do
@@ -177,6 +174,7 @@ install_my_scripts() {
     repo="https://github.com/casualtyface/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
     local_config="$HOME/.config/fish/config.fish"
+    repo_exist="$build_dir/container-configuration-script"
 
     # Clone the repo if it doesn't exist
     if [[ ! -d "$repo_exist" ]]; then
