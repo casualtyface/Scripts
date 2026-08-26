@@ -67,7 +67,7 @@ package_exists() {
 }
 
 for p in "${pkg[@]}"; do
-    package_exists "$p" && echo "Skipping $p" || missing+=("$p")
+    package_exists "$p" && echo "Package $p exists in repo" || missing+=("$p")
 done
 
 invalid_pkg=("${missing[@]}")
@@ -169,8 +169,9 @@ install_fastfetch() {
 install_fastfetch
 
 install_my_scripts() {
-    build_dir=$(mktemp -d)
     cleanup() { rm -rf "$build_dir"; }
+    build_dir=$(mktemp -d)
+    
 
     repo="https://github.com/casualtyface/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
@@ -190,7 +191,7 @@ install_my_scripts() {
 
     while IFS=: read -r username _ uid _ _ home _; do
         # Skip users without a real home directory
-        [[ -d "$home" ]] || continue
+        [[ "$home" == /home/* && -d "$home" ]] || continue
 
         local_config="$home/.config/fish/config.fish"
 
