@@ -174,7 +174,7 @@ install_fastfetch
 install_my_scripts() {
     cleanup() { rm -rf "$build_dir"; }
     build_dir=$(mktemp -d)
-    repo="https://github.com/<my-repo>/Scripts.git"
+    repo="https://github.com/casualtyface/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
     local_config="$HOME/.config/fish/config.fish"
 
