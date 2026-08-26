@@ -134,22 +134,22 @@ pkg=("${filtered[@]}")
 # ─────────────────────────────────────────────
 case "${package_manager[0]}" in
     apt)
-        apt-get update
+        apt-get update >/dev/null 2>&1
         apt-get install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     dnf)
-        dnf check-update --refresh
+        dnf check-update --refresh >/dev/null 2>&1
         dnf install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     apk)
-        apk update
+        apk update >/dev/null 2>&1
         apk add "${pkg[@]}"
         ;;
 
     zypper)
-        zypper refresh
+        zypper refresh >/dev/null 2>&1
         zypper install -y --no-confirm "${pkg[@]}" >/dev/null 2>&1
         ;;
 
@@ -162,7 +162,7 @@ case "${package_manager[0]}" in
         ;;
 
     yum)
-        yum check-update
+        yum check-update >/dev/null 2>&1
         yum install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
 
@@ -176,12 +176,6 @@ esac
 # Install fastfetch
 # ─────────────────────────────────────────────
 install_fastfetch() {
-
-    if command -v fastfetch >/dev/null 2>&1; then
-        print_mint "fastfetch is already installed"
-        return
-    fi
-
     cleanup() {
         rm -rf "$build_dir"
     }
@@ -199,7 +193,7 @@ install_fastfetch() {
             return 1
         }
 
-    cd "$build_dir" || {
+    pushd "$build_dir" >/dev/null || {
         print_error "ERROR: Failed to enter fastfetch build directory"
         cleanup
         return 1
@@ -208,13 +202,13 @@ install_fastfetch() {
     print_mint "Building fastfetch..."
 
     cmake -B build -DCMAKE_BUILD_TYPE=Release || {
-        print_error "ERROR: Failed to configure fastfetch"
+        popd >/dev/null
         cleanup
         return 1
     }
 
     cmake --build build -j"$(nproc)" || {
-        print_error "ERROR: Failed to build fastfetch"
+        popd >/dev/null
         cleanup
         return 1
     }
@@ -222,15 +216,18 @@ install_fastfetch() {
     print_mint "Installing fastfetch..."
 
     sudo cmake --install build || {
-        print_error "ERROR: Failed to install fastfetch"
+        popd >/dev/null
         cleanup
         return 1
     }
 
+    popd >/dev/null
     cleanup
 
     print_mint "fastfetch installed successfully"
 }
+
+
 
 install_fastfetch
 
@@ -240,10 +237,11 @@ install_fastfetch
 install_my_scripts() {
 
     cleanup() {
-        rm -rf "$build_dir"
+    [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
     }
 
     build_dir=$(mktemp -d)
+
 
     repo="https://github.com/casualtyface/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
