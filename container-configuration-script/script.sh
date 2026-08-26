@@ -192,9 +192,6 @@ install_my_scripts() {
         # Skip users without a real home directory
         [[ -d "$home" ]] || continue
 
-        # Skip system users
-        [[ "$uid" -ge 1000 ]] || continue
-
         local_config="$home/.config/fish/config.fish"
 
         mkdir -p "$home/.config/fish" || {
