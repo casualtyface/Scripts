@@ -22,10 +22,6 @@ print_mint() {
     printf "${MINT}%s${RESET}\n" "$1"
 }
 
-print_value() {
-    printf "${MINT}%s ${CYAN}%s${RESET}\n" "$1" "$2"
-}
-
 print_error() {
     printf "${RED}%s${RESET}\n" "$1"
 }
@@ -33,6 +29,11 @@ print_error() {
 print_mint_value() {
     printf "${MINT}%s${CYAN}%s${RESET}\n" "$1" "$2"
 }
+
+print_mint_value_mint() {
+    printf "${MINT}%s${CYAN}%s${MINT}%s${RESET}\n" "$1" "$2" "$3"
+}
+
 
 # ─────────────────────────────────────────────
 # Required packages
@@ -81,7 +82,6 @@ done
 
 if (( ${#pkg[@]} > 0 )); then
     print_mint_value "Packages You dont have: " "${pkg[*]}"
-    print_mint_value "Installing with " "${package_manager[0]} package manager"
 else
     print_mint "packages already installed"
 fi
@@ -103,10 +103,10 @@ package_exists() {
 
 for p in "${pkg[@]}"; do
     if package_exists "$p"; then
-        print_mint_value "Package " "$p exists in repo"
+        print_mint_value_mint "Package " "$p " "exists in repo"
     else
         missing+=("$p")
-        print_mint_value "Package " "$p not found in repo"
+        print_mint_value_mint "Package " "$p " "not found in repo"
     fi
 done
 
@@ -132,37 +132,45 @@ pkg=("${filtered[@]}")
 # ─────────────────────────────────────────────
 # Install packages
 # ─────────────────────────────────────────────
+print_mint_value_mint "Installing with " "${package_manager[0]} " "package manager"
 case "${package_manager[0]}" in
     apt)
         apt-get update >/dev/null 2>&1
+        print_mint_value "Installing: " "${pkg[*]}"
         apt-get install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     dnf)
         dnf check-update --refresh >/dev/null 2>&1
+        print_mint_value "Installing: " "${pkg[*]}"
         dnf install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     apk)
         apk update >/dev/null 2>&1
+        print_mint_value "Installing: " "${pkg[*]}"
         apk add "${pkg[@]}"
         ;;
 
     zypper)
         zypper refresh >/dev/null 2>&1
+        print_mint_value "Installing: " "${pkg[*]}"
         zypper install -y --no-confirm "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     yay)
+        print_mint_value "Installing: " "${pkg[*]}"
         yay -Sy --needed --noconfirm "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     pacman)
+        print_mint_value "Installing: " "${pkg[*]}"
         pacman -Sy --needed --noconfirm "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     yum)
         yum check-update >/dev/null 2>&1
+        print_mint_value "Installing: " "${pkg[*]}"
         yum install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
 
@@ -187,7 +195,7 @@ install_fastfetch() {
 
     git clone --depth=1 \
         https://github.com/fastfetch-cli/fastfetch.git \
-        "$build_dir" || {
+        "$build_dir" >/dev/null 2>&1 || {
             print_error "ERROR: Failed to clone fastfetch"
             cleanup
             return 1
@@ -248,7 +256,7 @@ install_my_scripts() {
 
     print_mint "Cloning Scripts repo..."
 
-    git clone --depth=1 "$repo" "$build_dir" || {
+    git clone --depth=1 "$repo" "$build_dir" >/dev/null 2>&1 || {
         print_error "ERROR: Failed to clone Scripts repository"
         cleanup
         return 1
