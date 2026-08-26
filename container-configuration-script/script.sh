@@ -1,10 +1,40 @@
 #!/usr/bin/env bash
 
-# bash -c "$(curl -fsSL https://raw.githubusercontent.com/casualtyface/Scripts/main/container-configuration-script/script.sh)"
 set -euo pipefail
 
 clear
 
+# ─────────────────────────────────────────────
+# Colors
+# ─────────────────────────────────────────────
+RESET='\033[0m'
+
+MINT='\033[38;5;121m'
+CYAN='\033[38;5;51m'
+RED='\033[38;5;196m'
+
+# ─────────────────────────────────────────────
+# Colored printf helpers
+# ─────────────────────────────────────────────
+print_mint() {
+    printf "${MINT}%s${RESET}\n" "$1"
+}
+
+print_value() {
+    printf "${MINT}%s ${CYAN}%s${RESET}\n" "$1" "$2"
+}
+
+print_error() {
+    printf "${RED}%s${RESET}\n" "$1"
+}
+
+print_mint_value() {
+    printf "${MINT}%s${CYAN}%s${RESET}\n" "$1" "$2"
+}
+
+# ─────────────────────────────────────────────
+# Required packages
+# ─────────────────────────────────────────────
 required=(
     bat
     git
@@ -30,10 +60,10 @@ pm=(
 )
 
 pkg=()
-
+missing=()
 package_manager=()
 
-printf "%s\n" "checking for packages: ${required[*]}"
+print_mint_value "checking for packages: " "${required[*]}"
 
 for cmd in "${required[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -47,15 +77,18 @@ for cmd in "${pm[@]}"; do
     fi
 done
 
-if [[ -n ${pkg[*]} ]]; then
-    printf "%s\n" "Packages You dont have: ${pkg[*]}"
-    printf "%s\n" "Installing with ${package_manager[*]} package manager"
+if (( ${#pkg[@]} > 0 )); then
+    print_mint_value "Packages You dont have: " "${pkg[*]}"
+    print_mint_value "Installing with " "${package_manager[0]} package manager"
 else
-    printf "%s\n" "packages already installed"
+    print_mint "packages already installed"
 fi
 
+# ─────────────────────────────────────────────
+# Package repository check
+# ─────────────────────────────────────────────
 package_exists() {
-    case "$package_manager" in
+    case "${package_manager[0]}" in
         apt)     apt-cache show "$1" >/dev/null 2>&1 ;;
         dnf)     dnf info "$1" >/dev/null 2>&1 ;;
         pacman)  pacman -Si "$1" >/dev/null 2>&1 ;;
@@ -67,7 +100,12 @@ package_exists() {
 }
 
 for p in "${pkg[@]}"; do
-    package_exists "$p" && echo "Package $p exists in repo" || missing+=("$p")
+    if package_exists "$p"; then
+        print_mint_value "Package " "$p exists in repo"
+    else
+        missing+=("$p")
+        print_mint_value "Package " "$p not found in repo"
+    fi
 done
 
 invalid_pkg=("${missing[@]}")
@@ -76,142 +114,180 @@ filtered=()
 
 for p in "${pkg[@]}"; do
     found=false
+
     for bad in "${invalid_pkg[@]}"; do
         if [[ $p == "$bad" ]]; then
             found=true
             break
         fi
     done
+
     $found || filtered+=("$p")
 done
 
 pkg=("${filtered[@]}")
 
-case "$package_manager" in
+# ─────────────────────────────────────────────
+# Install packages
+# ─────────────────────────────────────────────
+case "${package_manager[0]}" in
     apt)
         apt-get update
         apt-get install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
+
     dnf)
         dnf check-update --refresh
         dnf install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
+
     apk)
         apk update
         apk add "${pkg[@]}"
         ;;
+
     zypper)
         zypper refresh
         zypper install -y --no-confirm "${pkg[@]}" >/dev/null 2>&1
         ;;
+
     yay)
         yay -Sy --needed --noconfirm "${pkg[@]}" >/dev/null 2>&1
         ;;
+
     pacman)
         pacman -Sy --needed --noconfirm "${pkg[@]}" >/dev/null 2>&1
         ;;
+
     yum)
         yum check-update
         yum install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
+
     *)
-        printf "%s\n" "Unsupported package manager."
+        print_error "Unsupported package manager."
         exit 1
         ;;
 esac
 
+# ─────────────────────────────────────────────
+# Install fastfetch
+# ─────────────────────────────────────────────
 install_fastfetch() {
+
     if command -v fastfetch >/dev/null 2>&1; then
-        printf "%s\n" "fastfetch is already installed"
+        print_mint "fastfetch is already installed"
         return
     fi
 
-    cleanup() { rm -rf "$build_dir"; }
+    cleanup() {
+        rm -rf "$build_dir"
+    }
+
     build_dir=$(mktemp -d)
 
-    printf "%s\n" "fastfetch is missing"
-    printf "%s\n" "Cloning fastfetch..."
+    print_mint "fastfetch is missing"
+    print_mint "Cloning fastfetch..."
 
-    git clone --depth=1 https://github.com/fastfetch-cli/fastfetch.git "$build_dir" || {
-        cleanup
-        return 1
-    }
-               
+    git clone --depth=1 \
+        https://github.com/fastfetch-cli/fastfetch.git \
+        "$build_dir" || {
+            print_error "ERROR: Failed to clone fastfetch"
+            cleanup
+            return 1
+        }
+
     cd "$build_dir" || {
+        print_error "ERROR: Failed to enter fastfetch build directory"
         cleanup
         return 1
     }
 
-    printf "%s\n" "Building fastfetch..."
+    print_mint "Building fastfetch..."
 
     cmake -B build -DCMAKE_BUILD_TYPE=Release || {
+        print_error "ERROR: Failed to configure fastfetch"
         cleanup
         return 1
     }
 
     cmake --build build -j"$(nproc)" || {
+        print_error "ERROR: Failed to build fastfetch"
         cleanup
         return 1
     }
 
-    printf "%s\n" "Installing fastfetch..."
+    print_mint "Installing fastfetch..."
 
     sudo cmake --install build || {
+        print_error "ERROR: Failed to install fastfetch"
         cleanup
         return 1
     }
 
     cleanup
 
-    printf "%s\n" "fastfetch installed successfully"
+    print_mint "fastfetch installed successfully"
 }
 
 install_fastfetch
 
+# ─────────────────────────────────────────────
+# Install personal scripts
+# ─────────────────────────────────────────────
 install_my_scripts() {
-    cleanup() { rm -rf "$build_dir"; }
-    build_dir=$(mktemp -d)
-    
 
-    repo="https://github.com/casualtyface/Scripts.git"
+    cleanup() {
+        rm -rf "$build_dir"
+    }
+
+    build_dir=$(mktemp -d)
+
+    repo="https://github.com/<my-repo>/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
 
-    printf "%s\n" "Cloning Scripts repo..."
+    print_mint "Cloning Scripts repo..."
 
     git clone --depth=1 "$repo" "$build_dir" || {
+        print_error "ERROR: Failed to clone Scripts repository"
         cleanup
         return 1
     }
 
     if [[ ! -f "$fish_config" ]]; then
-        printf "%s\n" "ERROR: config.fish not found in repository"
+        print_error "ERROR: config.fish not found in repository"
         cleanup
         return 1
     fi
 
     while IFS=: read -r username _ uid _ _ home _; do
+
         # Skip users without a real home directory
         [[ "$home" == /home/* && -d "$home" ]] || continue
 
         local_config="$home/.config/fish/config.fish"
 
         mkdir -p "$home/.config/fish" || {
-            printf "%s\n" "ERROR: Failed to create Fish config directory for $username"
+            print_error "ERROR: Failed to create Fish config directory for $username"
             continue
         }
 
-        if [[ ! -f "$local_config" ]] || ! cmp -s "$fish_config" "$local_config"; then
-            printf "%s\n" "Installing Fish config for $username..."
+        if [[ ! -f "$local_config" ]] ||
+           ! cmp -s "$fish_config" "$local_config"; then
+
+            print_mint_value "Installing Fish config for " "$username..."
 
             cp "$fish_config" "$local_config" || {
-                printf "%s\n" "ERROR: Failed to install Fish config for $username"
+                print_error "ERROR: Failed to install Fish config for $username"
                 continue
             }
 
             chown "$username:$username" "$local_config"
+
         else
-            printf "%s\n" "Fish config for $username is already up to date"
+            print_mint_value "Fish config for " "$username is already up to date"
         fi
+
     done < /etc/passwd
 
     cleanup
@@ -219,18 +295,33 @@ install_my_scripts() {
 
 install_my_scripts
 
-[[ ! -d "$HOME/.ssh" ]] && { mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"; }
+# ─────────────────────────────────────────────
+# SSH / MOTD configuration
+# ─────────────────────────────────────────────
+[[ ! -d "$HOME/.ssh" ]] && {
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+}
 
-[[ -e /etc/update-motd.d/10-uname ]] && sudo rm -f /etc/update-motd.d/10-uname
+[[ -e /etc/update-motd.d/10-uname ]] &&
+    sudo rm -f /etc/update-motd.d/10-uname
 
-[[ -d /etc/update-motd.d ]] && sudo chmod -x /etc/update-motd.d/*
+[[ -d /etc/update-motd.d ]] &&
+    sudo chmod -x /etc/update-motd.d/*
 
-[[ ! -e /root/.hushlogin ]] && sudo touch /root/.hushlogin
+[[ ! -e /root/.hushlogin ]] &&
+    sudo touch /root/.hushlogin
 
 config="/etc/ssh/sshd_config"
 backup="/etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
 
-[[ ! -e "$backup" ]] && cp "$config" "$backup" && printf "%s\n" "Backup created: $backup" || printf "%s\n" "Backup failed"
+if [[ ! -e "$backup" ]]; then
+    if cp "$config" "$backup"; then
+        print_mint_value "Backup created: " "$backup"
+    else
+        print_error "ERROR: Backup failed"
+    fi
+fi
 
 declare -A settings=(
     ["AddressFamily"]="inet"
@@ -245,32 +336,38 @@ for key in "${!settings[@]}"; do
     value="${settings[$key]}"
 
     if grep -qE "^[#[:space:]]*$key[[:space:]]+" "$config"; then
-        # Replace existing entry
-        sed -i -E "s|^[#[:space:]]*$key[[:space:]].*|$key $value|" "$config"
+
+        sed -i -E \
+            "s|^[#[:space:]]*$key[[:space:]].*|$key $value|" \
+            "$config"
+
     else
-        # Add missing entry
         printf "%s\n" "$key $value" >> "$config"
     fi
 done
 
-printf "%s\n" "SSH configuration updated."
+print_mint "SSH configuration updated."
 
 if sshd -t; then
-    printf "%s\n" "SSH configuration syntax OK."
+    print_mint "SSH configuration syntax OK."
 else
-    printf "%s\n" "ERROR: SSH configuration test failed. Restore backup:"
-    printf "%s\n" "cp \"$backup\" \"$config\""
+    print_error "ERROR: SSH configuration test failed."
+    print_mint_value "Restore backup: " "cp \"$backup\" \"$config\""
 fi
 
+# ─────────────────────────────────────────────
+# PAM configuration
+# ─────────────────────────────────────────────
 config="/etc/pam.d/sshd"
 
 if [[ -f "$config" ]]; then
+
     backup="${config}.backup.$(date +%Y%m%d_%H%M%S)"
 
     if cp "$config" "$backup"; then
-        printf "%s\n" "Backup created: $backup"
+        print_mint_value "Backup created: " "$backup"
     else
-        printf "%s\n" "ERROR: Failed to create backup of $config"
+        print_error "ERROR: Failed to create backup of $config"
         exit 1
     fi
 
@@ -281,38 +378,62 @@ if [[ -f "$config" ]]; then
     )
 
     for rule in "${RULES[@]}"; do
+
         if grep -qF "$rule" "$config"; then
+
             sed -i "s|^$rule|#$rule|" "$config"
-            printf "%s\n" "Disabled: $rule"
+
+            print_mint_value "Disabled: " "$rule"
+
         else
-            printf "%s\n" "Not found: $rule"
+            print_mint_value "Not found: " "$rule"
         fi
+
     done
 
-    printf "%s\n" "Current PAM entries:"
+    print_mint "Current PAM entries:"
     grep -E "pam_motd|pam_mail" "$config"
+
 else
-    printf "%s\n" "$config not found. Skipping PAM configuration."
+    print_error "$config not found. Skipping PAM configuration."
 fi
 
+# ─────────────────────────────────────────────
+# Restart SSH
+# ─────────────────────────────────────────────
 if systemctl restart sshd >/dev/null 2>&1; then
-    printf "%s\n" "SSH service restarted successfully."
+
+    print_mint "SSH service restarted successfully."
     systemctl status sshd --no-pager
+
 elif systemctl restart ssh >/dev/null 2>&1; then
-    printf "%s\n" "SSH service restarted successfully."
+
+    print_mint "SSH service restarted successfully."
     systemctl status ssh --no-pager
+
 else
-    printf "%s\n" "ERROR: Failed to restart SSH service."
-    printf "%s\n" "Checking SSH configuration:"
+
+    print_error "ERROR: Failed to restart SSH service."
+    print_mint "Checking SSH configuration:"
     sshd -t
+
 fi
 
-
-# Add fish to valid login shells if not already present
+# ─────────────────────────────────────────────
+# Add fish to valid login shells
+# ─────────────────────────────────────────────
 if ! grep -qx "/usr/local/bin/fish" /etc/shells; then
-    printf "%s\n" "/usr/local/bin/fish" | sudo tee -a /etc/shells >/dev/null
+    print_mint_value "Adding valid shell: " "/usr/local/bin/fish"
+
+    printf "%s\n" "/usr/local/bin/fish" |
+        sudo tee -a /etc/shells >/dev/null
 fi
 
+# ─────────────────────────────────────────────
 # Change current user's shell to fish
-chsh -s "$(command -v fish)"
+# ─────────────────────────────────────────────
+fish_path="$(command -v fish)"
 
+print_mint_value "Changing login shell to: " "$fish_path"
+
+chsh -s "$fish_path"
