@@ -34,6 +34,9 @@ print_mint_value_mint() {
     printf "${MINT}%s${CYAN}%s${MINT}%s${RESET}\n" "$1" "$2" "$3"
 }
 
+print_mint_value_red() {
+    printf "${MINT}%s${CYAN}%s${RED}%s${RESET}\n" "$1" "$2" "$3"
+}
 
 # ─────────────────────────────────────────────
 # Required packages
@@ -106,7 +109,7 @@ for p in "${pkg[@]}"; do
         print_mint_value_mint "Package " "$p " "exists in repo"
     else
         missing+=("$p")
-        print_mint_value_mint "Package " "$p " "not found in repo"
+        print_mint_value_red "Package " "$p " "not found in repo"
     fi
 done
 
@@ -260,7 +263,7 @@ install_my_scripts() {
         cleanup
         return 1
     }
-
+``
     if [[ ! -f "$fish_config" ]]; then
         print_error "ERROR: config.fish not found in repository"
         cleanup
@@ -281,6 +284,11 @@ install_my_scripts() {
             continue
         }
 
+        chown "$username:$username" "$home/.config" "$home/.config/fish" || {
+        print_error "ERROR: Failed to set ownership of Fish config directory for $username"
+        continue
+        }
+
         if [[ ! -f "$local_config" ]] ||
            ! cmp -s "$fish_config" "$local_config"; then
 
@@ -291,7 +299,10 @@ install_my_scripts() {
                 continue
             }
 
-            chown "$username:$username" "$local_config"
+            if ! chown "$username:$username" "$local_config"; then
+                print_error "ERROR: Failed to set ownership for $username"
+            continue
+fi
 
         else
             print_mint_value "Fish config for " "$username is already up to date"
