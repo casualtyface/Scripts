@@ -125,64 +125,82 @@ esac
 
 install_fastfetch() {
     if command -v fastfetch >/dev/null 2>&1; then
+        printf "%s\n" "fastfetch is already installed"
         return
     fi
 
-    printf "%s\n" "fastfetch is missing"
-
+    cleanup() { rm -rf "$build_dir"; }
     build_dir=$(mktemp -d)
 
+    printf "%s\n" "fastfetch is missing"
     printf "%s\n" "Cloning fastfetch..."
-    git clone --depth=1 https://github.com/fastfetch-cli/fastfetch.git "$build_dir"
 
-    cd "$build_dir" || exit 1
+    git clone --depth=1 https://github.com/fastfetch-cli/fastfetch.git "$build_dir" || {
+        cleanup
+        return 1
+    }
+               
+    cd "$build_dir" || {
+        cleanup
+        return 1
+    }
 
     printf "%s\n" "Building fastfetch..."
-    cmake -B build -DCMAKE_BUILD_TYPE=Release
-    cmake --build build -j"$(nproc)"
+
+    cmake -B build -DCMAKE_BUILD_TYPE=Release || {
+        cleanup
+        return 1
+    }
+
+    cmake --build build -j"$(nproc)" || {
+        cleanup
+        return 1
+    }
 
     printf "%s\n" "Installing fastfetch..."
-    sudo cmake --install build
 
-    cd /
-    rm -rf "$build_dir"
+    sudo cmake --install build || {
+        cleanup
+        return 1
+    }
 
-    printf "%s\n" "fastfetch installed successfully."
+    cleanup
+
+    printf "%s\n" "fastfetch installed successfully"
 }
 
 install_fastfetch
 
 install_my_scripts() {
-    repo="https://github.com/casualtyface/Scripts.git"
+    cleanup() { rm -rf "$build_dir"; }
+    build_dir=$(mktemp -d)
+    repo="https://github.com/<my-repo>/Scripts.git"
+    fish_config="$build_dir/container-configuration-script/fish/config.fish"
+    local_config="$HOME/.config/fish/config.fish"
 
     # Clone the repo if it doesn't exist
     if [[ ! -d "$repo_exist" ]]; then
         printf "%s\n" "Cloning Scripts repo..."
-        git clone --depth=1 "$repo" "$dotfiles" || return 1
+        git clone --depth=1 "$repo" "$build_dir" || cleanup return 1
     else
         printf "%s\n" "Scripts repo exists"
     fi
 
-    # Make sure the destination directory exists
     mkdir -p "$HOME/.config/fish"
 
-    # Copy config.fish if it is missing
-    if [[ ! -f "$HOME/.config/fish/config.fish" ]]; then
-        printf "%s\n" "Installing fish config..."
+    # Install if missing or different from the repo version
+    if [[ ! -f "$local_config" ]] || \
+       [[ "$(sha256sum "$fish_config" | awk '{print $1}')" != "$(sha256sum "$local_config" | awk '{print $1}')" ]]; then
 
-        if [[ -f "$dotfiles/container-configuration-script/fish/config.fish" ]]; then
-            chmod 644 "$dotfiles/container-configuration-script/fish/config.fish"
-            cp "$dotfiles/container-configuration-script/fish/config.fish" \
-               "$HOME/.config/fish/config.fish"
-        else
-            printf "%s\n" "Error: config.fish not found in repository"
-            return 1
-        fi
+        printf "%s\n" "Installing/updating fish config..."
+
+        chmod 644 "$fish_config"
+        cp "$fish_config" "$local_config"
     else
-        printf "%s\n" "Fish config already exists"
+        printf "%s\n" "Fish config is already up to date"
     fi
+    cleanup
 }
-
 
 install_my_scripts
 
@@ -222,51 +240,47 @@ done
 
 printf "%s\n" "SSH configuration updated."
 
-sshd -t
-
-if [[ $? -eq 0 ]]; then
+if sshd -t; then
     printf "%s\n" "SSH configuration syntax OK."
-    printf "%s\n" "Restart SSH service to apply changes:"
-    printf "%s\n" "systemctl restart sshd"
 else
     printf "%s\n" "ERROR: SSH configuration test failed. Restore backup:"
-    printf "%s\n" "cp $backup $config"
+    printf "%s\n" "cp \"$backup\" \"$config\""
 fi
 
 config="/etc/pam.d/sshd"
 
-if [[ ! -f "$config" ]]; then
-    printf "%s\n" "ERROR: Cannot find $config"
-    exit 1
+if [[ -f "$config" ]]; then
+    backup="${config}.backup.$(date +%Y%m%d_%H%M%S)"
+
+    if cp "$config" "$backup"; then
+        printf "%s\n" "Backup created: $backup"
+    else
+        printf "%s\n" "ERROR: Failed to create backup of $config"
+        exit 1
+    fi
+
+    RULES=(
+        "session    optional     pam_motd.so  motd=/run/motd.dynamic"
+        "session    optional     pam_motd.so noupdate"
+        "session    optional     pam_mail.so standard noenv"
+    )
+
+    for rule in "${RULES[@]}"; do
+        if grep -qF "$rule" "$config"; then
+            sed -i "s|^$rule|#$rule|" "$config"
+            printf "%s\n" "Disabled: $rule"
+        else
+            printf "%s\n" "Not found: $rule"
+        fi
+    done
+
+    printf "%s\n" "Current PAM entries:"
+    grep -E "pam_motd|pam_mail" "$config"
+else
+    printf "%s\n" "$config not found. Skipping PAM configuration."
 fi
 
-backup="${config}.backup.$(date +%Y%m%d_%H%M%S)"
-
-cp "$config" "$backup"
-
-printf "%s\n" "Backup created: $backup"
-
-RULES=(
-"session    optional     pam_motd.so  motd=/run/motd.dynamic"
-"session    optional     pam_motd.so noupdate"
-"session    optional     pam_mail.so standard noenv"
-)
-
-for rule in "${RULES[@]}"; do
-    if grep -qF "$rule" "$config"; then
-        sed -i "s|^$rule|#$rule|" "$config"
-        printf "%s\n" "Disabled: $rule"
-    else
-        printf "%s\n" "Not found: $rule"
-    fi
-done
-
-printf "%s\n" "Current PAM entries:"
-grep -E "pam_motd|pam_mail" "$config"
-
-systemctl restart sshd
-
-if [ $? -eq 0 ]; then
+if systemctl restart sshd || systemctl restart ssh; then
     printf "%s\n" "SSH service restarted successfully."
     systemctl status sshd --no-pager
 else
