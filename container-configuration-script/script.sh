@@ -185,7 +185,7 @@ esac
 # ─────────────────────────────────────────────
 install_fastfetch() {
     cleanup() {
-        rm -rf "$build_dir"
+    [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
     }
 
     build_dir=$(mktemp -d)
@@ -209,7 +209,7 @@ install_fastfetch() {
 
     print_mint "Building fastfetch..."
 
-    cmake -B build -DCMAKE_BUILD_TYPE=Release || {
+    cmake -B build -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 || {
         popd >/dev/null
         cleanup
         return 1
@@ -223,7 +223,7 @@ install_fastfetch() {
 
     print_mint "Installing fastfetch..."
 
-    sudo cmake --install build || {
+    sudo cmake --install build >/dev/null 2>&1 || {
         popd >/dev/null
         cleanup
         return 1
@@ -250,7 +250,6 @@ install_my_scripts() {
 
     build_dir=$(mktemp -d)
 
-
     repo="https://github.com/casualtyface/Scripts.git"
     fish_config="$build_dir/container-configuration-script/fish/config.fish"
 
@@ -268,10 +267,12 @@ install_my_scripts() {
         return 1
     fi
 
-    while IFS=: read -r username _ uid _ _ home _; do
+    while IFS=: read -r username _ _ _ _ home _; do
 
         # Skip users without a real home directory
-        [[ "$home" == /home/* && -d "$home" ]] || continue
+        [[ "$home" == "/root" || "$home" == /home/* ]] &&
+        [[ -d "$home" ]] ||
+        continue
 
         local_config="$home/.config/fish/config.fish"
 
