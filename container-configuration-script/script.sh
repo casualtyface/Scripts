@@ -69,20 +69,6 @@ pkg=()
 missing=()
 package_manager=()
 
-run_as_root() {
-        if [[ $EUID -eq 0 ]]; then
-            "$@"
-        elif command -v sudo >/dev/null 2>&1; then
-            sudo "$@"
-        elif command -v doas >/dev/null 2>&1; then
-            doas "$@"
-        else
-            print_error "ERROR: Root privileges are required."
-            return 1
-        fi
-}
-
-run_as_root
 
 print_mint_value "checking for packages: " "${required[*]}"
 
