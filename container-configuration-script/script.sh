@@ -69,7 +69,23 @@ pkg=()
 missing=()
 package_manager=()
 
+run_as_root() {
+        if [[ $EUID -eq 0 ]]; then
+            "$@"
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo "$@"
+        elif command -v doas >/dev/null 2>&1; then
+            doas "$@"
+        else
+            print_error "ERROR: Root privileges are required."
+            return 1
+        fi
+}
+
+run_as_root
+
 print_mint_value "checking for packages: " "${required[*]}"
+
 
 for cmd in "${required[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -187,55 +203,251 @@ esac
 # Install fastfetch
 # ─────────────────────────────────────────────
 install_fastfetch() {
-    cleanup() {
-    [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
-    }
-
-    build_dir=$(mktemp -d)
+    local pkg_manager=""
+    local installer=""
+    local build_dir=""
+    local arch=""
+    local url=""
 
     print_mint "fastfetch is missing"
-    print_mint "Cloning fastfetch..."
+    print_mint "Trying to install fastfetch..."
 
-    git clone --depth=1 \
-        https://github.com/fastfetch-cli/fastfetch.git \
-        "$build_dir" >/dev/null 2>&1 || {
-            print_error "ERROR: Failed to clone fastfetch"
+    # ------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------
+
+    cleanup() {
+        [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
+    }
+
+    run_as_root() {
+        if [[ $EUID -eq 0 ]]; then
+            "$@"
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo "$@"
+        elif command -v doas >/dev/null 2>&1; then
+            doas "$@"
+        else
+            print_error "ERROR: Root privileges are required."
+            return 1
+        fi
+    }
+
+    command_exists() {
+        command -v "$1" >/dev/null 2>&1
+    }
+
+    verify_fastfetch() {
+        if command_exists fastfetch; then
+            print_mint "fastfetch installed successfully"
+            return 0
+        fi
+
+        print_error "ERROR: fastfetch installation completed, but the binary was not found."
+        return 1
+    }
+
+    # ------------------------------------------------------------
+    # Package manager detection
+    # ------------------------------------------------------------
+
+    if command_exists pacman; then
+        pkg_manager="pacman"
+        installer=(pacman -S --needed --noconfirm fastfetch)
+
+    elif command_exists dnf; then
+        pkg_manager="dnf"
+        installer=(dnf install -y fastfetch)
+
+    elif command_exists zypper; then
+        pkg_manager="zypper"
+        installer=(zypper --non-interactive install fastfetch)
+
+    elif command_exists apk; then
+        pkg_manager="apk"
+        installer=(apk add --no-cache fastfetch)
+
+    elif command_exists xbps-install; then
+        pkg_manager="xbps"
+        installer=(xbps-install -Sy fastfetch)
+
+    elif command_exists emerge; then
+        pkg_manager="emerge"
+        installer=(emerge --ask=n app-misc/fastfetch)
+
+    elif command_exists eopkg; then
+        pkg_manager="eopkg"
+        installer=(eopkg install -y fastfetch)
+
+    elif command_exists nix-env; then
+        pkg_manager="nix"
+        installer=(nix-env -iA nixpkgs.fastfetch)
+
+    elif command_exists brew; then
+        pkg_manager="brew"
+        installer=(brew install fastfetch)
+
+    elif command_exists apt-get; then
+        pkg_manager="apt"
+        installer=(apt-get install -y fastfetch)
+
+    elif command_exists apt; then
+        pkg_manager="apt"
+        installer=(apt install -y fastfetch)
+    fi
+
+    # ------------------------------------------------------------
+    # Package manager installation
+    # ------------------------------------------------------------
+
+    if [[ -n "$pkg_manager" ]]; then
+        print_mint_value "Detected package manager: " "$pkg_manager"
+
+        case "$pkg_manager" in
+            pacman)
+                run_as_root "${installer[@]}"
+                ;;
+
+            dnf|zypper|apk|xbps|emerge|eopkg|apt)
+                run_as_root "${installer[@]}"
+                ;;
+
+            nix)
+                "${installer[@]}"
+                ;;
+
+            brew)
+                "${installer[@]}"
+                ;;
+        esac
+
+        if verify_fastfetch; then
+            return 0
+        fi
+
+        print_error "Package manager could not provide fastfetch."
+        print_mint "Falling back to official binary..."
+    fi
+
+    # ------------------------------------------------------------
+    # Homebrew fallback
+    # ------------------------------------------------------------
+
+    if command_exists brew; then
+        print_mint "Installing fastfetch with Homebrew..."
+
+        if brew install fastfetch; then
+            verify_fastfetch && return 0
+        fi
+    fi
+
+    # ------------------------------------------------------------
+    # Official binary fallback
+    #
+    # Fastfetch publishes Linux binaries for x86_64 and aarch64.
+    # ------------------------------------------------------------
+
+    if ! command_exists curl && ! command_exists wget; then
+        print_error "ERROR: curl or wget is required for the binary fallback."
+        return 1
+    fi
+
+    arch="$(uname -m)"
+
+    case "$arch" in
+        x86_64|amd64)
+            arch="amd64"
+            ;;
+
+        aarch64|arm64)
+            arch="aarch64"
+            ;;
+
+        *)
+            print_error "ERROR: Unsupported CPU architecture: $arch"
+            print_error "Try installing fastfetch manually through your distro."
+            return 1
+            ;;
+    esac
+
+    build_dir="$(mktemp -d)"
+
+    print_mint "Downloading official fastfetch binary..."
+
+    # Get the latest release information from GitHub.
+    local release_api="https://api.github.com/repos/fastfetch-cli/fastfetch/releases/latest"
+    local release_json="$build_dir/release.json"
+
+    if command_exists curl; then
+        curl -fsSL "$release_api" -o "$release_json" || {
+            print_error "ERROR: Failed to retrieve fastfetch release information."
             cleanup
             return 1
         }
+    else
+        wget -qO "$release_json" "$release_api" || {
+            print_error "ERROR: Failed to retrieve fastfetch release information."
+            cleanup
+            return 1
+        }
+    fi
 
-    pushd "$build_dir" >/dev/null || {
-        print_error "ERROR: Failed to enter fastfetch build directory"
+    # Find the Linux tarball for the current architecture.
+    url="$(
+        grep -oE '"browser_download_url":[[:space:]]*"[^"]+fastfetch-linux-'"$arch"'[^"]+\.tar\.gz"' \
+            "$release_json" |
+        sed -E 's/.*"browser_download_url":[[:space:]]*"([^"]+)".*/\1/' |
+        head -n1
+    )"
+
+    if [[ -z "$url" ]]; then
+        print_error "ERROR: Could not find an official fastfetch binary for $arch."
+        cleanup
+        return 1
+    fi
+
+    print_mint_value "Downloading: " "$url"
+
+    if command_exists curl; then
+        curl -fL "$url" -o "$build_dir/fastfetch.tar.gz" || {
+            print_error "ERROR: Failed to download fastfetch."
+            cleanup
+            return 1
+        }
+    else
+        wget -q "$url" -O "$build_dir/fastfetch.tar.gz" || {
+            print_error "ERROR: Failed to download fastfetch."
+            cleanup
+            return 1
+        }
+    fi
+
+    print_mint "Installing official binary..."
+
+    tar -xzf "$build_dir/fastfetch.tar.gz" -C "$build_dir" || {
+        print_error "ERROR: Failed to extract fastfetch."
         cleanup
         return 1
     }
 
-    print_mint "Building fastfetch..."
+    local fastfetch_bin
+    fastfetch_bin="$(find "$build_dir" -type f -name fastfetch -perm -111 | head -n1)"
 
-    cmake -B build -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 || {
-        popd >/dev/null
+    if [[ -z "$fastfetch_bin" ]]; then
+        print_error "ERROR: fastfetch binary was not found in the archive."
+        cleanup
+        return 1
+    fi
+
+    run_as_root install -Dm755 "$fastfetch_bin" /usr/local/bin/fastfetch || {
+        print_error "ERROR: Failed to install fastfetch to /usr/local/bin."
         cleanup
         return 1
     }
 
-    cmake --build build -j"$(nproc)" || {
-        popd >/dev/null
-        cleanup
-        return 1
-    }
-
-    print_mint "Installing fastfetch..."
-
-    sudo cmake --install build >/dev/null 2>&1 || {
-        popd >/dev/null
-        cleanup
-        return 1
-    }
-
-    popd >/dev/null
     cleanup
 
-    print_mint "fastfetch installed successfully"
+    verify_fastfetch
 }
 
 
