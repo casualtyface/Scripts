@@ -263,7 +263,8 @@ install_my_scripts() {
         cleanup
         return 1
     }
-``
+ 
+
     if [[ ! -f "$fish_config" ]]; then
         print_error "ERROR: config.fish not found in repository"
         cleanup
