@@ -198,7 +198,7 @@ install_fastfetch() {
 
     git clone --depth=1 \
         https://github.com/fastfetch-cli/fastfetch.git \
-        "$build_dir" >/dev/null 2>&1 || {
+        "$build_dir" || {
             print_error "ERROR: Failed to clone fastfetch"
             cleanup
             return 1
