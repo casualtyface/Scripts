@@ -187,24 +187,49 @@ esac
 # Install fastfetch
 # ─────────────────────────────────────────────
 install_fastfetch() {
+
+    FASTFETCH_VERSION="2.67.0"
+
     cleanup() {
-    [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
+        [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
     }
 
     build_dir=$(mktemp -d)
 
+    if command -v fastfetch >/dev/null 2>&1; then
+        print_mint "fastfetch is already installed"
+        return 0
+    fi
+
     print_mint "fastfetch is missing"
+
+    build_dir=$(mktemp -d) || {
+        print_error "ERROR: Failed to create temporary build directory"
+        return 1
+    }
+
     print_mint "Cloning fastfetch..."
 
-    git clone --depth=1 \
-        https://github.com/fastfetch-cli/fastfetch.git \
-        "$build_dir" || {
-            print_error "ERROR: Failed to clone fastfetch"
+    curl -fL --retry 3 \
+        "https://github.com/fastfetch-cli/fastfetch/archive/refs/tags/${FASTFETCH_VERSION}.tar.gz" \
+        -o "$build_dir/fastfetch.tar.gz" || {
+            print_error "ERROR: Failed to download fastfetch"
             cleanup
             return 1
         }
 
-    pushd "$build_dir" >/dev/null || {
+    tar -xzf "$build_dir/fastfetch.tar.gz" -C "$build_dir" || {
+        print_error "ERROR: Failed to extract fastfetch"
+        cleanup
+        return 1
+    }
+    mv "$build_dir/fastfetch-${FASTFETCH_VERSION}" "$build_dir/source" || {
+        print_error "ERROR: Failed to prepare fastfetch source"
+        cleanup
+        return 1
+    }
+
+    pushd "$build_dir/source" >/dev/null || {
         print_error "ERROR: Failed to enter fastfetch build directory"
         cleanup
         return 1
@@ -248,28 +273,25 @@ install_fastfetch
 install_my_scripts() {
 
     cleanup() {
-    [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
+        [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
     }
 
-    build_dir=$(mktemp -d)
-
-    repo="https://github.com/casualtyface/Scripts.git"
-    fish_config="$build_dir/container-configuration-script/fish/config.fish"
-
-    print_mint "Cloning Scripts repo..."
-
-    git clone --depth=1 "$repo" "$build_dir" || {
-        print_error "ERROR: Failed to clone Scripts repository"
-        cleanup
+    build_dir=$(mktemp -d) || {
+        print_error "ERROR: Failed to create temporary directory"
         return 1
     }
- 
 
-    if [[ ! -f "$fish_config" ]]; then
-        print_error "ERROR: config.fish not found in repository"
-        cleanup
-        return 1
-    fi
+    fish_config="$build_dir/config.fish"
+
+    print_mint "Downloading Fish config..."
+
+    curl -fL --retry 3 \
+        "https://raw.githubusercontent.com/casualtyface/Scripts/main/container-configuration-script/fish/config.fish" \
+        -o "$fish_config" || {
+            print_error "ERROR: Failed to download Fish config"
+            cleanup
+            return 1
+        }
 
     while IFS=: read -r username _ _ _ _ home _; do
 
@@ -285,9 +307,11 @@ install_my_scripts() {
             continue
         }
 
-        chown "$username:$username" "$home/.config" "$home/.config/fish" || {
-        print_error "ERROR: Failed to set ownership of Fish config directory for $username"
-        continue
+        chown "$username:$username" \
+            "$home/.config" \
+            "$home/.config/fish" || {
+            print_error "ERROR: Failed to set ownership of Fish config directory for $username"
+            continue
         }
 
         if [[ ! -f "$local_config" ]] ||
@@ -302,8 +326,8 @@ install_my_scripts() {
 
             if ! chown "$username:$username" "$local_config"; then
                 print_error "ERROR: Failed to set ownership for $username"
-            continue
-fi
+                continue
+            fi
 
         else
             print_mint_value "Fish config for " "$username is already up to date"
