@@ -258,7 +258,7 @@ install_my_scripts() {
 
     print_mint "Cloning Scripts repo..."
 
-    git clone --depth=1 "$repo" "$build_dir" >/dev/null 2>&1 || {
+    git clone --depth=1 "$repo" "$build_dir" || {
         print_error "ERROR: Failed to clone Scripts repository"
         cleanup
         return 1
