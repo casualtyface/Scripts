@@ -212,7 +212,7 @@ install_fastfetch() {
 
     curl -fL --retry 3 \
         "https://github.com/fastfetch-cli/fastfetch/archive/refs/tags/${FASTFETCH_VERSION}.tar.gz" \
-        -o "$build_dir/fastfetch.tar.gz" || {
+        -o "$build_dir/fastfetch.tar.gz" >/dev/null || {
             print_error "ERROR: Failed to download fastfetch"
             cleanup
             return 1
@@ -287,7 +287,7 @@ install_my_scripts() {
 
     curl -fL --retry 3 \
         "https://raw.githubusercontent.com/casualtyface/Scripts/main/container-configuration-script/fish/config.fish" \
-        -o "$fish_config" || {
+        -o "$fish_config" >/dev/null || {
             print_error "ERROR: Failed to download Fish config"
             cleanup
             return 1
