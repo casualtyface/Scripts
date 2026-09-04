@@ -65,11 +65,33 @@ pm=(
     yum
 )
 
+repositories=(
+    "universe"
+    "ppa:zhangsongcui3371/fastfetch"
+)
+
 pkg=()
 missing=()
 package_manager=()
 
 print_mint_value "checking for packages: " "${required[*]}"
+
+
+add_repositories() {
+    for repo in "${repositories[@]}"; do
+        if grep -Rqs "$repo" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+            print_mint_value "Repository already exists: " "$repo"
+            continue
+        fi
+
+        print_mint_value "Adding repository: " "$repo"
+        sudo add-apt-repository -y "$repo"
+    done
+
+    sudo apt-get update >/dev/null 2>&1
+}
+
+add_repositories
 
 for cmd in "${required[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -138,9 +160,9 @@ pkg=("${filtered[@]}")
 print_mint_value_mint "Installing with " "${package_manager[0]} " "package manager"
 case "${package_manager[0]}" in
     apt)
-        apt-get update >/dev/null 2>&1
+        apt-get update
         print_mint_value "Installing: " "${pkg[*]}"
-        apt-get install -y "${pkg[@]}" >/dev/null 2>&1
+        apt-get install -y "${pkg[@]}"
         ;;
 
     dnf)
@@ -200,6 +222,8 @@ install_fastfetch() {
         print_mint "fastfetch is already installed"
         return 0
     fi
+
+
 
     print_mint "fastfetch is missing"
 
@@ -263,14 +287,18 @@ install_fastfetch() {
     print_mint "fastfetch installed successfully"
 }
 
-
-
 install_fastfetch
 
 # ─────────────────────────────────────────────
 # Install personal scripts
 # ─────────────────────────────────────────────
 install_my_scripts() {
+
+    # source path | destination path | display name
+    local configs=(
+        "fish/config.fish|.config/fish/config.fish|Fish"
+        "bat/config|.config/bat/config|bat"
+    )
 
     cleanup() {
         [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
@@ -281,17 +309,19 @@ install_my_scripts() {
         return 1
     }
 
-    fish_config="$build_dir/config.fish"
+    local config_dir="$build_dir/container-configuration-script"
 
-    print_mint "Downloading Fish config..."
+    print_mint "Downloading configuration scripts..."
 
     curl -fL --retry 3 \
-        "https://raw.githubusercontent.com/casualtyface/Scripts/main/container-configuration-script/fish/config.fish" \
-        -o "$fish_config" >/dev/null || {
-            print_error "ERROR: Failed to download Fish config"
+        "https://github.com/casualtyface/Scripts/archive/refs/heads/main.tar.gz" |
+        tar -xz -C "$build_dir" || {
+            print_error "ERROR: Failed to download configuration scripts"
             cleanup
             return 1
         }
+
+    local config_dir="$build_dir/Scripts-main/container-configuration-script"
 
     while IFS=: read -r username _ _ _ _ home _; do
 
@@ -300,38 +330,44 @@ install_my_scripts() {
         [[ -d "$home" ]] ||
         continue
 
-        local_config="$home/.config/fish/config.fish"
+        for config in "${configs[@]}"; do
 
-        mkdir -p "$home/.config/fish" || {
-            print_error "ERROR: Failed to create Fish config directory for $username"
-            continue
-        }
+            IFS='|' read -r source destination name <<< "$config"
 
-        chown "$username:$username" \
-            "$home/.config" \
-            "$home/.config/fish" || {
-            print_error "ERROR: Failed to set ownership of Fish config directory for $username"
-            continue
-        }
+            source="$config_dir/$source"
+            destination="$home/$destination"
+            destination_dir="$(dirname "$destination")"
 
-        if [[ ! -f "$local_config" ]] ||
-           ! cmp -s "$fish_config" "$local_config"; then
-
-            print_mint_value "Installing Fish config for " "$username..."
-
-            cp "$fish_config" "$local_config" || {
-                print_error "ERROR: Failed to install Fish config for $username"
+            mkdir -p "$destination_dir" || {
+                print_error "ERROR: Failed to create config directory for $username: $destination_dir"
                 continue
             }
 
-            if ! chown "$username:$username" "$local_config"; then
-                print_error "ERROR: Failed to set ownership for $username"
+            chown "$username:$username" "$destination_dir" || {
+                print_error "ERROR: Failed to set ownership of config directory for $username"
                 continue
+            }
+
+            if [[ ! -f "$destination" ]] ||
+               ! cmp -s "$source" "$destination"; then
+
+                print_mint_value "Installing $name config for " "$username..."
+
+                cp "$source" "$destination" || {
+                    print_error "ERROR: Failed to install $name config for $username"
+                    continue
+                }
+
+                chown "$username:$username" "$destination" || {
+                    print_error "ERROR: Failed to set ownership of $name config for $username"
+                    continue
+                }
+
+            else
+                print_mint_value "$name config for " "$username is already up to date"
             fi
 
-        else
-            print_mint_value "Fish config for " "$username is already up to date"
-        fi
+        done
 
     done < /etc/passwd
 
