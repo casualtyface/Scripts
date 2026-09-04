@@ -166,9 +166,7 @@ case "${package_manager[0]}" in
     apt)
         apt-get update >/dev/null 2>&1
         print_mint_value "Installing: " "${pkg[*]}"
-        apt-get install -y "${pkg[@]}" \
-        -o Dpkg::Progress-Fancy="1" \
-        -o APT::Color="1"
+        apt-get install -y "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     dnf)
@@ -180,7 +178,7 @@ case "${package_manager[0]}" in
     apk)
         apk update >/dev/null 2>&1
         print_mint_value "Installing: " "${pkg[*]}"
-        apk add "${pkg[@]}"
+        apk add "${pkg[@]}" >/dev/null 2>&1
         ;;
 
     zypper)
