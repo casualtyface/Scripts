@@ -166,7 +166,7 @@ case "${package_manager[0]}" in
     apt)
         apt-get update
         print_mint_value "Installing: " "${pkg[*]}"
-        apt-get install -y "${pkg[@]}"
+        apt install -y "${pkg[@]}"
         ;;
 
     dnf)
