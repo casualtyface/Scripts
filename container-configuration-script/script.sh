@@ -30,6 +30,10 @@ print_mint_value() {
     printf "${MINT}%s${CYAN}%s${RESET}\n" "$1" "$2"
 }
 
+print_red_value() {
+    printf "${RED}%s${CYAN}%s${RESET}\n" "$1" "$2"
+}
+
 print_mint_value_mint() {
     printf "${MINT}%s${CYAN}%s${MINT}%s${RESET}\n" "$1" "$2" "$3"
 }
@@ -53,6 +57,8 @@ required=(
     sudo
     fastfetch
     unattended-upgrades
+    software-properties-common
+
 )
 
 pm=(
@@ -76,7 +82,6 @@ package_manager=()
 
 print_mint_value "checking for packages: " "${required[*]}"
 
-
 add_repositories() {
     for repo in "${repositories[@]}"; do
         if grep -Rqs "$repo" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
@@ -91,7 +96,6 @@ add_repositories() {
     sudo apt-get update >/dev/null 2>&1
 }
 
-add_repositories
 
 for cmd in "${required[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -205,6 +209,8 @@ case "${package_manager[0]}" in
         ;;
 esac
 
+add_repositories
+
 # ─────────────────────────────────────────────
 # Install fastfetch
 # ─────────────────────────────────────────────
@@ -216,14 +222,37 @@ install_fastfetch() {
         [[ -n "${build_dir:-}" && -d "$build_dir" ]] && rm -rf "$build_dir"
     }
 
-    build_dir=$(mktemp -d)
-
     if command -v fastfetch >/dev/null 2>&1; then
         print_mint "fastfetch is already installed"
         return 0
     fi
 
+    # ─────────────────────────────────────────
+    # Try package manager first
+    # ─────────────────────────────────────────
+    if [[ "${package_manager[0]}" == "apt" ]]; then
 
+        if apt-cache show fastfetch >/dev/null 2>&1; then
+            print_mint "fastfetch is available through apt"
+            print_mint "Installing fastfetch with apt..."
+
+            sudo apt-get install -y fastfetch >/dev/null 2>&1 || {
+                print_error "ERROR: Failed to install fastfetch with apt"
+                return 1
+            }
+
+            print_mint "fastfetch installed successfully"
+            return 0
+        fi
+
+        print_mint "fastfetch is not available through apt"
+        print_mint "Proceeding with source build..."
+
+    fi
+
+    # ─────────────────────────────────────────
+    # Build fastfetch from source
+    # ─────────────────────────────────────────
 
     print_mint "fastfetch is missing"
 
@@ -247,6 +276,7 @@ install_fastfetch() {
         cleanup
         return 1
     }
+
     mv "$build_dir/fastfetch-${FASTFETCH_VERSION}" "$build_dir/source" || {
         print_error "ERROR: Failed to prepare fastfetch source"
         cleanup
@@ -287,7 +317,46 @@ install_fastfetch() {
     print_mint "fastfetch installed successfully"
 }
 
+# ─────────────────────────────────────────────
+# Install bat
+# ─────────────────────────────────────────────
+install_bat() {
+
+    if command -v bat >/dev/null 2>&1; then
+        print_mint "bat is already installed"
+        return 0
+    fi
+
+    print_mint "bat is missing"
+
+    # ─────────────────────────────────────────
+    # Try package manager
+    # ─────────────────────────────────────────
+    if [[ "${package_manager[0]}" == "apt" ]]; then
+
+        if apt-cache show bat >/dev/null 2>&1; then
+            print_mint "bat is available through apt"
+            print_mint "Installing bat with apt..."
+
+            sudo apt-get install -y bat >/dev/null 2>&1 || {
+                print_error "ERROR: Failed to install bat with apt"
+                return 1
+            }
+
+            print_mint "bat installed successfully"
+            return 0
+        fi
+
+        print_red_value "ERROR: bat is not available through " "apt"
+        return 1
+    fi
+
+    print_red_value "ERROR: bat cannot be installed automatically with " "${package_manager[0]}"
+    return 1
+}
+
 install_fastfetch
+install_bat
 
 # ─────────────────────────────────────────────
 # Install personal scripts
