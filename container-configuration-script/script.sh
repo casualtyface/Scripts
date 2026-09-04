@@ -58,7 +58,6 @@ required=(
     fastfetch
     unattended-upgrades
     software-properties-common
-
 )
 
 pm=(
