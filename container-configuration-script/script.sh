@@ -90,7 +90,7 @@ add_repositories() {
         fi
 
         print_mint_value "Adding repository: " "$repo"
-        sudo add-apt-repository -y "$repo"
+        sudo add-apt-repository -y "$repo" >/dev/null 2>&1
     done
 
     sudo apt-get update >/dev/null 2>&1
@@ -164,9 +164,11 @@ pkg=("${filtered[@]}")
 print_mint_value_mint "Installing with " "${package_manager[0]} " "package manager"
 case "${package_manager[0]}" in
     apt)
-        apt-get update
+        apt-get update >/dev/null 2>&1
         print_mint_value "Installing: " "${pkg[*]}"
-        apt install -y "${pkg[@]}"
+        apt-get install -y "${pkg[@]}" \
+        -o Dpkg::Progress-Fancy="1" \
+        -o APT::Color="1"
         ;;
 
     dnf)
