@@ -384,7 +384,7 @@ install_my_scripts() {
 
     curl -fL --retry 3 \
         "https://github.com/casualtyface/Scripts/archive/refs/heads/main.tar.gz" |
-        tar -xz -C "$build_dir" || {
+        tar -xz -C "$build_dir" >/dev/null || {
             print_error "ERROR: Failed to download configuration scripts"
             cleanup
             return 1
