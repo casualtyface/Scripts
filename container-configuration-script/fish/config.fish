@@ -29,7 +29,7 @@ alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 alias cat='batcat'
-alias clear="clear && fastfetch"
+alias clear="clear && fastfetch --config examples/27.jsonc"
 
 # Other
 alias emacs="emacsclient -c -a 'emacs'" 
